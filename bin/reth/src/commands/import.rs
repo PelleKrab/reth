@@ -24,7 +24,7 @@ use reth_network_p2p::{
 use reth_node_events::node::NodeEvent;
 use reth_primitives::{stage::StageId, PruneModes, B256};
 use reth_provider::{
-    BlockNumReader, ChainSpecProvider, HeaderProvider, HeaderSyncMode, ProviderError,
+    BlockNumReader, ChainSpecProvider, HeaderProvider, ProviderError,
     ProviderFactory, StageCheckpointReader,
 };
 use reth_stages::{prelude::*, Pipeline, StageSet};
@@ -195,7 +195,7 @@ where
         .set_download_range(file_client.min_block().unwrap()..=file_client.max_block().unwrap())
         .expect("failed to set download range");
 
-    let (tip_tx, tip_rx) = watch::channel(B256::ZERO);
+    let (tip_tx, _tip_rx) = watch::channel(B256::ZERO);
     let executor = block_executor!(provider_factory.chain_spec());
 
     let max_block = file_client.max_block().unwrap_or(0);
@@ -207,7 +207,6 @@ where
         .add_stages(
             DefaultStages::new(
                 provider_factory.clone(),
-                HeaderSyncMode::Tip(tip_rx),
                 consensus.clone(),
                 header_downloader,
                 body_downloader,

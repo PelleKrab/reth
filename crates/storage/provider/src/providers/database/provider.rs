@@ -7,7 +7,7 @@ use crate::{
     },
     AccountReader, BlockExecutionWriter, BlockHashReader, BlockNumReader, BlockReader, BlockWriter,
     Chain, EvmEnvProvider, FinalizedBlockReader, FinalizedBlockWriter, HashingWriter,
-    HeaderProvider, HeaderSyncGap, HeaderSyncGapProvider, HeaderSyncMode, HistoricalStateProvider,
+    HeaderProvider, HeaderSyncGap, HeaderSyncGapProvider, HistoricalStateProvider,
     HistoryWriter, LatestStateProvider, OriginalValuesKnown, ProviderError, PruneCheckpointReader,
     PruneCheckpointWriter, RequestsProvider, StageCheckpointReader, StateProviderBox, StateWriter,
     StatsReader, StorageReader, TransactionVariant, TransactionsProvider, TransactionsProviderExt,
@@ -1116,7 +1116,6 @@ impl<TX: DbTx> ChangeSetReader for DatabaseProvider<TX> {
 impl<TX: DbTx> HeaderSyncGapProvider for DatabaseProvider<TX> {
     fn sync_gap(
         &self,
-        mode: HeaderSyncMode,
         highest_uninterrupted_block: BlockNumber,
     ) -> ProviderResult<HeaderSyncGap> {
         let static_file_provider = self.static_file_provider();
@@ -1151,10 +1150,7 @@ impl<TX: DbTx> HeaderSyncGapProvider for DatabaseProvider<TX> {
             .sealed_header(highest_uninterrupted_block)?
             .ok_or_else(|| ProviderError::HeaderNotFound(highest_uninterrupted_block.into()))?;
 
-        let target = match mode {
-            HeaderSyncMode::Tip(rx) => SyncTarget::Tip(*rx.borrow()),
-            HeaderSyncMode::Continuous => SyncTarget::TipNum(highest_uninterrupted_block + 1),
-        };
+        let target =  SyncTarget::TipNum(highest_uninterrupted_block + 1);
 
         Ok(HeaderSyncGap { local_head, target })
     }

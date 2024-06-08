@@ -19,7 +19,6 @@ use reth_primitives::{
 use reth_provider::{
     providers::{StaticFileProvider, StaticFileWriter},
     BlockHashReader, DatabaseProviderRW, HeaderProvider, HeaderSyncGap, HeaderSyncGapProvider,
-    HeaderSyncMode,
 };
 use reth_stages_api::{
     BlockErrorKind, ExecInput, ExecOutput, Stage, StageError, UnwindInput, UnwindOutput,
@@ -48,8 +47,6 @@ pub struct HeaderStage<Provider, Downloader: HeaderDownloader> {
     provider: Provider,
     /// Strategy for downloading the headers
     downloader: Downloader,
-    /// The sync mode for the stage.
-    mode: HeaderSyncMode,
     /// Consensus client implementation
     consensus: Arc<dyn Consensus>,
     /// Current sync gap.
@@ -72,14 +69,12 @@ where
     pub fn new(
         database: Provider,
         downloader: Downloader,
-        mode: HeaderSyncMode,
         consensus: Arc<dyn Consensus>,
         etl_config: EtlConfig,
     ) -> Self {
         Self {
             provider: database,
             downloader,
-            mode,
             consensus,
             sync_gap: None,
             hash_collector: Collector::new(etl_config.file_size / 2, etl_config.dir.clone()),
@@ -126,7 +121,7 @@ where
             let (sealed_header, _) = SealedHeader::from_compact(&header_buf, header_buf.len());
             let (header, header_hash) = sealed_header.split();
             if header.number == 0 {
-                continue
+                continue;
             }
             last_header_number = header.number;
 
@@ -206,11 +201,11 @@ where
 
         // Return if stage has already completed the gap on the ETL files
         if self.is_etl_ready {
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
 
         // Lookup the head and tip of the sync range
-        let gap = self.provider.sync_gap(self.mode.clone(), current_checkpoint.block_number)?;
+        let gap = self.provider.sync_gap(current_checkpoint.block_number)?;
         let tip = gap.target.tip();
         self.sync_gap = Some(gap.clone());
 
@@ -223,7 +218,7 @@ where
                 "Target block already reached"
             );
             self.is_etl_ready = true;
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
 
         debug!(target: "sync::stages::headers", ?tip, head = ?gap.local_head.hash(), "Commencing sync");
@@ -247,13 +242,13 @@ where
                         // filled the gap.
                         if header_number == local_head_number + 1 {
                             self.is_etl_ready = true;
-                            return Poll::Ready(Ok(()))
+                            return Poll::Ready(Ok(()));
                         }
                     }
                 }
                 Some(Err(HeadersDownloaderError::DetachedHead { local_head, header, error })) => {
                     error!(target: "sync::stages::headers", %error, "Cannot attach header to head");
-                    return Poll::Ready(Err(StageError::DetachedHead { local_head, header, error }))
+                    return Poll::Ready(Err(StageError::DetachedHead { local_head, header, error }));
                 }
                 None => return Poll::Ready(Err(StageError::ChannelClosed)),
             }
@@ -271,12 +266,12 @@ where
 
         if self.sync_gap.as_ref().ok_or(StageError::MissingSyncGap)?.is_closed() {
             self.is_etl_ready = false;
-            return Ok(ExecOutput::done(current_checkpoint))
+            return Ok(ExecOutput::done(current_checkpoint));
         }
 
         // We should be here only after we have downloaded all headers into the disk buffer (ETL).
         if !self.is_etl_ready {
-            return Err(StageError::MissingDownloadBuffer)
+            return Err(StageError::MissingDownloadBuffer);
         }
 
         // Reset flag
@@ -441,7 +436,6 @@ mod tests {
                 HeaderStage::new(
                     self.db.factory.clone(),
                     (*self.downloader_factory)(),
-                    HeaderSyncMode::Tip(self.channel.1.clone()),
                     self.consensus.clone(),
                     EtlConfig::default(),
                 )
@@ -462,7 +456,7 @@ mod tests {
                 let end = input.target.unwrap_or_default() + 1;
 
                 if start + 1 >= end {
-                    return Ok(Vec::default())
+                    return Ok(Vec::default());
                 }
 
                 let mut headers = random_header_range(&mut rng, start + 1..end, head.hash());

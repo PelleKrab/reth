@@ -46,7 +46,7 @@ use reth_db_api::database::Database;
 use reth_evm::execute::BlockExecutorProvider;
 use reth_network_p2p::{bodies::downloader::BodyDownloader, headers::downloader::HeaderDownloader};
 use reth_primitives::PruneModes;
-use reth_provider::{HeaderSyncGapProvider, HeaderSyncMode};
+use reth_provider::HeaderSyncGapProvider;
 use std::sync::Arc;
 
 /// A set containing all stages to run a fully syncing instance of reth.
@@ -87,7 +87,6 @@ impl<Provider, H, B, E> DefaultStages<Provider, H, B, E> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         provider: Provider,
-        header_mode: HeaderSyncMode,
         consensus: Arc<dyn Consensus>,
         header_downloader: H,
         body_downloader: B,
@@ -101,7 +100,6 @@ impl<Provider, H, B, E> DefaultStages<Provider, H, B, E> {
         Self {
             online: OnlineStages::new(
                 provider,
-                header_mode,
                 consensus,
                 header_downloader,
                 body_downloader,
@@ -158,8 +156,6 @@ where
 pub struct OnlineStages<Provider, H, B> {
     /// Sync gap provider for the headers stage.
     provider: Provider,
-    /// The sync mode for the headers stage.
-    header_mode: HeaderSyncMode,
     /// The consensus engine used to validate incoming data.
     consensus: Arc<dyn Consensus>,
     /// The block header downloader
@@ -174,13 +170,12 @@ impl<Provider, H, B> OnlineStages<Provider, H, B> {
     /// Create a new set of online stages with default values.
     pub fn new(
         provider: Provider,
-        header_mode: HeaderSyncMode,
         consensus: Arc<dyn Consensus>,
         header_downloader: H,
         body_downloader: B,
         stages_config: StageConfig,
     ) -> Self {
-        Self { provider, header_mode, consensus, header_downloader, body_downloader, stages_config }
+        Self { provider, consensus, header_downloader, body_downloader, stages_config }
     }
 }
 
@@ -202,7 +197,6 @@ where
     pub fn builder_with_bodies<DB: Database>(
         bodies: BodyStage<B>,
         provider: Provider,
-        mode: HeaderSyncMode,
         header_downloader: H,
         consensus: Arc<dyn Consensus>,
         stages_config: StageConfig,
@@ -211,7 +205,6 @@ where
             .add_stage(HeaderStage::new(
                 provider,
                 header_downloader,
-                mode,
                 consensus.clone(),
                 stages_config.etl,
             ))
@@ -231,7 +224,6 @@ where
             .add_stage(HeaderStage::new(
                 self.provider,
                 self.header_downloader,
-                self.header_mode,
                 self.consensus.clone(),
                 self.stages_config.etl.clone(),
             ))

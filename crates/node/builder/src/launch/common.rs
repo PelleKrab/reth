@@ -20,7 +20,7 @@ use reth_primitives::{
     stage::PipelineTarget, BlockNumber, Chain, ChainSpec, Head, PruneModes, B256,
 };
 use reth_provider::{
-    providers::StaticFileProvider, HeaderSyncMode, ProviderFactory, StaticFileProviderFactory,
+    providers::StaticFileProvider, ProviderFactory, StaticFileProviderFactory,
 };
 use reth_prune::PrunerBuilder;
 use reth_rpc_layer::JwtSecret;
@@ -371,7 +371,6 @@ where
             let pipeline = Pipeline::builder()
                 .add_stages(DefaultStages::new(
                     factory.clone(),
-                    HeaderSyncMode::Continuous,
                     Arc::new(EthBeaconConsensus::new(self.chain_spec())),
                     NoopHeaderDownloader::default(),
                     NoopBodiesDownloader::default(),

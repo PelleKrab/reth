@@ -17,7 +17,7 @@ use reth_node_core::{
     node_config::NodeConfig,
     primitives::{BlockNumber, B256},
 };
-use reth_provider::{HeaderSyncMode, ProviderFactory};
+use reth_provider::ProviderFactory;
 use reth_stages::{prelude::DefaultStages, stages::ExecutionStage, Pipeline, StageSet};
 use reth_static_file::StaticFileProducer;
 use reth_tasks::TaskExecutor;
@@ -103,22 +103,16 @@ where
         builder = builder.with_max_block(max_block)
     }
 
-    let (tip_tx, tip_rx) = watch::channel(B256::ZERO);
+    let (tip_tx, _tip_rx) = watch::channel(B256::ZERO);
 
     let prune_modes = prune_config.map(|prune| prune.segments).unwrap_or_default();
 
-    let header_mode = if node_config.debug.continuous {
-        HeaderSyncMode::Continuous
-    } else {
-        HeaderSyncMode::Tip(tip_rx)
-    };
     let pipeline = builder
         .with_tip_sender(tip_tx)
         .with_metrics_tx(metrics_tx.clone())
         .add_stages(
             DefaultStages::new(
                 provider_factory.clone(),
-                header_mode,
                 Arc::clone(&consensus),
                 header_downloader,
                 body_downloader,
