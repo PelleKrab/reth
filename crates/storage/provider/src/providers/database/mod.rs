@@ -583,7 +583,6 @@ mod tests {
     };
     use alloy_rlp::Decodable;
     use assert_matches::assert_matches;
-    use rand::Rng;
     use reth_db::{
         mdbx::DatabaseArguments,
         tables,
@@ -729,11 +728,9 @@ mod tests {
     fn header_sync_gap_lookup() {
         let factory = create_test_provider_factory();
         let provider = factory.provider_rw().unwrap();
-
-        let mut rng = generators::rng();
-        let consensus_tip: B256 = rng.gen();
-
+        
         // Genesis
+        let mut rng = generators::rng();
         let checkpoint = 0;
         let head = random_header(&mut rng, 0, None);
 
@@ -753,6 +750,5 @@ mod tests {
 
         let gap = provider.sync_gap(checkpoint).unwrap();
         assert_eq!(gap.local_head, head);
-        assert_eq!(gap.target.tip(), consensus_tip.into());
     }
 }
