@@ -17,12 +17,14 @@ members = [
     "crates/ethereum/engine-primitives/",
     "crates/ethereum/evm",
     "crates/ethereum/node",
+    "crates/ethereum/payload/",
     "crates/etl/",
     "crates/evm/",
     "crates/evm/execution-errors",
     "crates/evm/execution-types",
     "crates/exex/exex/",
     "crates/exex/test-utils/",
+    "crates/exex/types/",
     "crates/metrics/",
     "crates/metrics/metrics-derive/",
     "crates/net/common/",
@@ -37,7 +39,7 @@ members = [
     "crates/net/network-api/",
     "crates/net/network/",
     "crates/net/p2p/",
-    "crates/net/types/",
+    "crates/net/peers/",
     "crates/node-core/",
     "crates/node/api/",
     "crates/node/builder/",
@@ -49,11 +51,11 @@ members = [
     "crates/optimism/primitives/",
     "crates/payload/basic/",
     "crates/payload/builder/",
-    "crates/payload/ethereum/",
     "crates/payload/primitives/",
     "crates/payload/validator/",
     "crates/primitives/",
-    "crates/prune/",
+    "crates/prune/prune",
+    "crates/prune/types",
     "crates/revm/",
     "crates/rpc/ipc/",
     "crates/rpc/rpc-api/",
@@ -66,8 +68,8 @@ members = [
     "crates/rpc/rpc/",
     "crates/stages/api/",
     "crates/stages/stages/",
-    "crates/static-file-types/",
-    "crates/static-file/",
+    "crates/static-file/types/",
+    "crates/static-file/static-file",
     "crates/storage/codecs/",
     "crates/storage/codecs/derive/",
     "crates/storage/db/",
@@ -259,7 +261,7 @@ reth-eth-wire-types = { path = "crates/net/eth-wire-types" }
 reth-ethereum-consensus = { path = "crates/ethereum/consensus" }
 reth-ethereum-engine-primitives = { path = "crates/ethereum/engine-primitives" }
 reth-ethereum-forks = { path = "crates/ethereum-forks" }
-reth-ethereum-payload-builder = { path = "crates/payload/ethereum" }
+reth-ethereum-payload-builder = { path = "crates/ethereum/payload" }
 reth-etl = { path = "crates/etl" }
 reth-evm = { path = "crates/evm" }
 reth-evm-ethereum = { path = "crates/ethereum/evm" }
@@ -268,6 +270,7 @@ reth-execution-errors = { path = "crates/evm/execution-errors" }
 reth-execution-types = { path = "crates/evm/execution-types" }
 reth-exex = { path = "crates/exex/exex" }
 reth-exex-test-utils = { path = "crates/exex/test-utils" }
+reth-exex-types = { path = "crates/exex/types" }
 reth-fs-util = { path = "crates/fs-util" }
 reth-ipc = { path = "crates/rpc/ipc" }
 reth-libmdbx = { path = "crates/storage/libmdbx-rs" }
@@ -278,7 +281,7 @@ reth-net-common = { path = "crates/net/common" }
 reth-net-nat = { path = "crates/net/nat" }
 reth-network = { path = "crates/net/network" }
 reth-network-api = { path = "crates/net/network-api" }
-reth-network-types = { path = "crates/net/types" }
+reth-network-peers = { path = "crates/net/peers" }
 reth-network-p2p = { path = "crates/net/p2p" }
 reth-nippy-jar = { path = "crates/storage/nippy-jar" }
 reth-node-api = { path = "crates/node/api" }
@@ -295,7 +298,8 @@ reth-payload-primitives = { path = "crates/payload/primitives" }
 reth-payload-validator = { path = "crates/payload/validator" }
 reth-primitives = { path = "crates/primitives" }
 reth-provider = { path = "crates/storage/provider" }
-reth-prune = { path = "crates/prune" }
+reth-prune = { path = "crates/prune/prune" }
+reth-prune-types = { path = "crates/prune/types" }
 reth-revm = { path = "crates/revm" }
 reth-rpc = { path = "crates/rpc/rpc" }
 reth-rpc-api = { path = "crates/rpc/rpc-api" }
@@ -308,8 +312,8 @@ reth-rpc-types = { path = "crates/rpc/rpc-types" }
 reth-rpc-types-compat = { path = "crates/rpc/rpc-types-compat" }
 reth-stages = { path = "crates/stages/stages" }
 reth-stages-api = { path = "crates/stages/api" }
-reth-static-file = { path = "crates/static-file" }
-reth-static-file-types = { path = "crates/static-file-types" }
+reth-static-file = { path = "crates/static-file/static-file" }
+reth-static-file-types = { path = "crates/static-file/types" }
 reth-storage-api = { path = "crates/storage/storage-api" }
 reth-storage-errors = { path = "crates/storage/errors" }
 reth-tasks = { path = "crates/tasks" }

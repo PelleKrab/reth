@@ -41,6 +41,7 @@ use std::{
     sync::Arc,
     task::Poll,
 };
+use thiserror::Error;
 use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
 /// A test [`PoolBuilder`] that builds a [`TestPool`].
@@ -144,6 +145,26 @@ impl TestExExHandle {
         Ok(())
     }
 
+    /// Send a notification to the Execution Extension that the chain has been reorged
+    pub async fn send_notification_chain_reorged(
+        &self,
+        old: Chain,
+        new: Chain,
+    ) -> eyre::Result<()> {
+        self.notifications_tx
+            .send(ExExNotification::ChainReorged { old: Arc::new(old), new: Arc::new(new) })
+            .await?;
+        Ok(())
+    }
+
+    /// Send a notification to the Execution Extension that the chain has been reverted
+    pub async fn send_notification_chain_reverted(&self, chain: Chain) -> eyre::Result<()> {
+        self.notifications_tx
+            .send(ExExNotification::ChainReverted { old: Arc::new(chain) })
+            .await?;
+        Ok(())
+    }
+
     /// Asserts that the Execution Extension did not emit any events.
     #[track_caller]
     pub fn assert_events_empty(&self) {
@@ -240,21 +261,36 @@ pub async fn test_exex_context() -> eyre::Result<(ExExContext<Adapter>, TestExEx
 
 /// An extension trait for polling an Execution Extension future.
 pub trait PollOnce {
-    /// Polls the given Execution Extension future __once__ and asserts that it is
-    /// [`Poll::Pending`]. The future should be (pinned)[`std::pin::pin`].
+    /// Polls the given Execution Extension future __once__. The future should be
+    /// (pinned)[`std::pin::pin`].
     ///
-    /// # Panics
-    /// If the future returns [`Poll::Ready`], because Execution Extension future should never
-    /// resolve.
-    fn poll_once(&mut self) -> impl Future<Output = ()> + Send;
+    /// # Returns
+    /// - `Ok(())` if the future returned [`Poll::Pending`]. The future can be polled again.
+    /// - `Err(PollOnceError::FutureIsReady)` if the future returned [`Poll::Ready`] without an
+    ///   error. The future should never resolve.
+    /// - `Err(PollOnceError::FutureError(err))` if the future returned [`Poll::Ready`] with an
+    ///   error. Something went wrong.
+    fn poll_once(&mut self) -> impl Future<Output = Result<(), PollOnceError>> + Send;
+}
+
+/// An Execution Extension future polling error.
+#[derive(Error, Debug)]
+pub enum PollOnceError {
+    /// The future returned [`Poll::Ready`] without an error, but it should never resolve.
+    #[error("Execution Extension future returned Ready, but it should never resolve")]
+    FutureIsReady,
+    /// The future returned [`Poll::Ready`] with an error.
+    #[error(transparent)]
+    FutureError(#[from] eyre::Error),
 }
 
 impl<F: Future<Output = eyre::Result<()>> + Unpin + Send> PollOnce for F {
-    async fn poll_once(&mut self) {
-        poll_fn(|cx| {
-            assert!(self.poll_unpin(cx).is_pending());
-            Poll::Ready(())
+    async fn poll_once(&mut self) -> Result<(), PollOnceError> {
+        poll_fn(|cx| match self.poll_unpin(cx) {
+            Poll::Ready(Ok(())) => Poll::Ready(Err(PollOnceError::FutureIsReady)),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(PollOnceError::FutureError(err))),
+            Poll::Pending => Poll::Ready(Ok(())),
         })
-        .await;
+        .await
     }
 }

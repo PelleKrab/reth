@@ -36,6 +36,7 @@ reth-engine-primitives.workspace = true
 reth-tasks.workspace = true
 reth-consensus-common.workspace = true
 reth-beacon-consensus.workspace = true
+reth-prune-types.workspace = true
 
 # ethereum
 alloy-rpc-types-engine.workspace = true
@@ -93,7 +94,7 @@ procfs = "0.16.0"
 [dev-dependencies]
 # test vectors generation
 proptest.workspace = true
-reth-network-types.workspace = true
+reth-network-peers.workspace = true
 
 [features]
 optimism = [
