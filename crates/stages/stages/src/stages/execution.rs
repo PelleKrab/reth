@@ -649,11 +649,15 @@ fn calculate_gas_used_from_headers<N: NodePrimitives>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::TestStageDB;
+    use crate::test_utils::{
+        stage_test_suite_ext, ExecuteStageTestRunner, StageTestRunner, TestRunnerError,
+        TestStageDB, UnwindStageTestRunner,
+    };
     use alloy_primitives::{address, hex_literal::hex, keccak256, Address, B256, U256};
     use alloy_rlp::Decodable;
     use assert_matches::assert_matches;
     use reth_chainspec::ChainSpecBuilder;
+    use reth_config::config::EtlConfig;
     use reth_db_api::{models::AccountBeforeTx, transaction::DbTxMut};
     use reth_evm::execute::BasicBlockExecutorProvider;
     use reth_evm_ethereum::execute::EthExecutionStrategyFactory;
@@ -665,6 +669,10 @@ mod tests {
     };
     use reth_prune_types::{PruneMode, ReceiptsLogPruneConfig};
     use reth_stages_api::StageUnitCheckpoint;
+    use reth_testing_utils::generators::{
+        self, random_block_range, random_changeset_range, random_contract_account_range,
+        BlockRangeParams,
+    };
     use std::collections::BTreeMap;
 
     fn stage() -> ExecutionStage<BasicBlockExecutorProvider<EthExecutionStrategyFactory>> {
@@ -1243,5 +1251,122 @@ mod tests {
                 )
             ]
         );
+    }
+
+    stage_test_suite_ext!(ExecutionTestRunner, execution);
+
+    struct ExecutionTestRunner {
+        pub(crate) db: TestStageDB,
+        prune_mode: PruneModes,
+        executor_provider: BasicBlockExecutorProvider<EthExecutionStrategyFactory>,
+        max_blocks: Option<u64>,
+        max_changes: Option<u64>,
+        max_cumulative_gas: Option<u64>,
+        max_duration: Option<Duration>,
+        external_clean_threshold: Option<u64>,
+        exex_manager_handle: Option<ExExManagerHandle>,
+    }
+
+    impl Default for ExecutionTestRunner {
+        fn default() -> Self {
+            let strategy_factory = EthExecutionStrategyFactory::ethereum(Arc::new(
+                ChainSpecBuilder::mainnet().berlin_activated().build(),
+            ));
+            let executor_provider = BasicBlockExecutorProvider::new(strategy_factory);
+
+            Self {
+                db: TestStageDB::default(),
+                prune_mode: PruneModes::none(),
+                executor_provider,
+                max_blocks: Some(100),
+                max_changes: None,
+                max_cumulative_gas: None,
+                max_duration: None,
+                external_clean_threshold: Some(MERKLE_STAGE_DEFAULT_CLEAN_THRESHOLD),
+                exex_manager_handle: Some(ExExManagerHandle::empty()),
+            }
+        }
+    }
+
+    impl StageTestRunner for ExecutionTestRunner {
+        type S = ExecutionStage<BasicBlockExecutorProvider<EthExecutionStrategyFactory>>;
+
+        fn db(&self) -> &TestStageDB {
+            &self.db
+        }
+
+        fn stage(&self) -> Self::S {
+            ExecutionStage::new(
+                self.executor_provider.clone(),
+                ExecutionStageThresholds {
+                    max_blocks: self.max_blocks,
+                    max_changes: self.max_changes,
+                    max_cumulative_gas: self.max_cumulative_gas,
+                    max_duration: self.max_duration,
+                },
+                self.external_clean_threshold.unwrap_or(MERKLE_STAGE_DEFAULT_CLEAN_THRESHOLD),
+                self.prune_mode.clone(),
+                self.exex_manager_handle.clone().unwrap_or_else(ExExManagerHandle::empty),
+            )
+        }
+    }
+
+    impl ExecuteStageTestRunner for ExecutionTestRunner {
+        type Seed = ();
+
+        fn seed_execution(&mut self, input: ExecInput) -> Result<Self::Seed, TestRunnerError> {
+            let stage_process = input.checkpoint().block_number;
+            let start = stage_process + 1;
+            let end = input.target();
+            let mut rng = generators::rng();
+
+            let num_of_accounts = 31;
+            let accounts = random_contract_account_range(&mut rng, &mut (0..num_of_accounts))
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+
+            let blocks = random_block_range(
+                &mut rng,
+                start..=end,
+                BlockRangeParams { parent: Some(B256::ZERO), tx_count: 0..3, ..Default::default() },
+            );
+
+            let (changesets, _) = random_changeset_range(
+                &mut rng,
+                blocks.iter(),
+                accounts.into_iter().map(|(addr, acc)| (addr, (acc, Vec::new()))),
+                0..3,
+                0..u64::MAX,
+            );
+
+            // add block changeset from block 1.
+            self.db.insert_changesets(changesets, Some(start))?;
+
+            Ok(())
+        }
+
+        fn validate_execution(
+            &self,
+            input: ExecInput,
+            output: Option<ExecOutput>,
+        ) -> Result<(), TestRunnerError> {
+            if let Some(output) = output {
+                assert_eq!(
+                    output,
+                    ExecOutput { checkpoint: StageCheckpoint::new(input.target()), done: true }
+                );
+
+                assert_eq!(output.checkpoint.block_number, input.target());
+            }
+            Ok(())
+        }
+    }
+
+    impl UnwindStageTestRunner for ExecutionTestRunner {
+        fn validate_unwind(&self, _input: UnwindInput) -> Result<(), TestRunnerError> {
+            let table = self.db.table::<tables::StoragesHistory>().unwrap();
+            assert!(table.is_empty());
+            Ok(())
+        }
     }
 }
