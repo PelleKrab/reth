@@ -18,6 +18,7 @@ pub const CAPABILITIES: &[&str] = &[
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
     "engine_forkchoiceUpdatedV4",
+    "engine_forkchoiceUpdatedV5",
     "engine_getClientVersionV1",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
@@ -30,12 +31,14 @@ pub const CAPABILITIES: &[&str] = &[
     "engine_newPayloadV3",
     "engine_newPayloadV4",
     "engine_newPayloadV5",
+    "engine_newPayloadV6",
     "engine_getPayloadBodiesByHashV1",
     "engine_getPayloadBodiesByHashV2",
     "engine_getPayloadBodiesByRangeV1",
     "engine_getPayloadBodiesByRangeV2",
     "engine_getBlobsV1",
     "engine_getBlobsV2",
+    "engine_getInclusionListV1",
     "engine_getBlobsV3",
 ];
 

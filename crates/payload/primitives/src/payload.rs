@@ -59,6 +59,9 @@ pub trait ExecutionPayload:
     /// Returns the total gas limit for this block.
     fn gas_limit(&self) -> u64;
 
+    /// Returns the (optional) inclusion list for the block.
+    fn inclusion_list(&self) -> Option<&Vec<Bytes>>;
+
     /// Returns the number of transactions in the payload.
     fn transaction_count(&self) -> usize;
     /// Returns the slot number included in this payload.
@@ -102,6 +105,10 @@ impl ExecutionPayload for ExecutionData {
 
     fn gas_limit(&self) -> u64 {
         self.payload.as_v1().gas_limit
+    }
+
+    fn inclusion_list(&self) -> Option<&Vec<Bytes>> {
+        self.sidecar.inclusion_list_transactions()
     }
 
     fn transaction_count(&self) -> usize {
@@ -169,7 +176,7 @@ where
     /// Determines the validation context based on the contained type.
     pub const fn message_validation_kind(&self) -> MessageValidationKind {
         match self {
-            Self::ExecutionPayload { .. } => MessageValidationKind::Payload,
+            Self::ExecutionPayload(_) => MessageValidationKind::Payload,
             Self::PayloadAttributes(_) => MessageValidationKind::PayloadAttributes,
         }
     }
@@ -187,6 +194,14 @@ where
         match self {
             Self::ExecutionPayload(payload) => payload.slot_number(),
             Self::PayloadAttributes(attributes) => attributes.slot_number(),
+        }
+    }
+
+    /// Returns the IL for the payload or attributes.
+    pub fn il(&self) -> Option<&Vec<Bytes>> {
+        match self {
+            Self::ExecutionPayload(_) => None,
+            Self::PayloadAttributes(attributes) => attributes.il(),
         }
     }
 }

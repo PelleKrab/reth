@@ -148,6 +148,9 @@ pub enum VersionSpecificValidationError {
     /// before Amsterdam
     #[error("slot number pre-Amsterdam")]
     HasSlotNumberPreAmsterdam,
+    /// Thrown if the pre-Bogota `PayloadAttributes` or `ExecutionPayload` contains an IL.
+    #[error("IL not supported before Bogota")]
+    IlNotSupportedPreBogota,
 }
 
 /// Error validating payload received over `newPayload` API.

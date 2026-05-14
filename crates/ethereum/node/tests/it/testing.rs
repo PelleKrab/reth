@@ -57,6 +57,7 @@ async fn testing_rpc_build_block_works() -> eyre::Result<()> {
                 withdrawals: None,
                 parent_beacon_block_root: None,
                 slot_number: None,
+                inclusion_list_transactions: None,
             };
 
             let request = TestingBuildBlockRequestV1 {

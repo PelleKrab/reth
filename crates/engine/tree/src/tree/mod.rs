@@ -759,6 +759,8 @@ where
             TreeOutcome::new(self.try_buffer_payload(payload)?)
         };
 
+        // TODO(focil): pass the IL alongside buffered blocks so that when sync catches up,
+        // IL validation can be applied retroactively to blocks received during live sync.
         // if the block is valid and it is the current sync target head, make it canonical
         if outcome.outcome.is_valid() && self.is_sync_target_head(block_hash) {
             // Only create the canonical event if this block isn't already the canonical head
@@ -2424,6 +2426,10 @@ where
         let block_count = blocks.len();
         for child in blocks {
             let child_num_hash = child.num_hash();
+            // NOTE
+            //
+            // we insert without an inclusion list, because we only enforce the IL for
+            // `on_new_payload`.
             match self.insert_block(child) {
                 Ok(res) => {
                     debug!(target: "engine::tree", child =?child_num_hash, ?res, "connected buffered block");
@@ -2795,6 +2801,10 @@ where
         }
 
         // try to append the block
+        //
+        // NOTE
+        //
+        // we insert without an inclusion list, because we only enforce the IL for `on_new_payload`.
         match self.insert_block(block) {
             Ok(InsertPayloadOk::Inserted(BlockStatus::Valid)) => {
                 return self.on_valid_downloaded_block(block_num_hash);
@@ -3043,11 +3053,20 @@ where
         self.emit_event(EngineApiEvent::BeaconConsensus(ConsensusEngineEvent::InvalidBlock(
             Box::new(block),
         )));
-
-        Ok(PayloadStatus::new(
-            PayloadStatusEnum::Invalid { validation_error: validation_err.to_string() },
-            latest_valid_hash,
-        ))
+        // If the validation error is specifically an inclusion-list failure,
+        // return the dedicated `InclusionListUnsatisfied` payload status.
+        match validation_err {
+            InsertBlockValidationError::Validation(
+                reth_errors::BlockValidationError::InvalidInclusionList,
+            ) => Ok(PayloadStatus::new(
+                PayloadStatusEnum::InclusionListUnsatisfied,
+                latest_valid_hash,
+            )),
+            _ => Ok(PayloadStatus::new(
+                PayloadStatusEnum::Invalid { validation_error: validation_err.to_string() },
+                latest_valid_hash,
+            )),
+        }
     }
 
     /// Handles a [`NewPayloadError`] by converting it to a [`PayloadStatus`].

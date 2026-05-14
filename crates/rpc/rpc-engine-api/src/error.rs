@@ -18,6 +18,8 @@ pub type EngineApiResult<Ok> = Result<Ok, EngineApiError>;
 pub const UNSUPPORTED_FORK_CODE: i32 = -38005;
 /// Payload unknown error code.
 pub const UNKNOWN_PAYLOAD_CODE: i32 = -38001;
+/// Parent Hash unknown error code.
+pub const UNKNOWN_PARENT_CODE: i32 = -38006;
 /// Request too large error code.
 pub const REQUEST_TOO_LARGE_CODE: i32 = -38004;
 
@@ -127,6 +129,7 @@ impl From<EngineApiError> for jsonrpsee_types::error::ErrorObject<'static> {
                     VersionSpecificValidationError::HasSlotNumberPreAmsterdam |
                     VersionSpecificValidationError::NoSlotNumberPostAmsterdam |
                     VersionSpecificValidationError::SlotNumberNotSupported,
+                    VersionSpecificValidationError::IlNotSupportedPreBogota,
                 ),
             ) |
             EngineApiError::UnexpectedRequestsHash => {
