@@ -3056,12 +3056,14 @@ where
         // If the validation error is specifically an inclusion-list failure,
         // return the dedicated `InclusionListUnsatisfied` payload status.
         match validation_err {
-            InsertBlockValidationError::Validation(
-                reth_errors::BlockValidationError::InvalidInclusionList,
-            ) => Ok(PayloadStatus::new(
+            InsertBlockValidationError::Validation(err)
+                if err.to_string() == "block did not satisfy inclusion list" =>
+            {
+                Ok(PayloadStatus::new(
                 PayloadStatusEnum::InclusionListUnsatisfied,
                 latest_valid_hash,
-            )),
+                ))
+            }
             _ => Ok(PayloadStatus::new(
                 PayloadStatusEnum::Invalid { validation_error: validation_err.to_string() },
                 latest_valid_hash,

@@ -1,5 +1,5 @@
-use alloy_eips::eip4895::Withdrawals;
-use alloy_primitives::TxNumber;
+use alloy_eips::eip4895::{Withdrawal, Withdrawals};
+use alloy_primitives::{Address, TxNumber};
 use core::ops::Range;
 
 /// Total number of transactions.
@@ -77,7 +77,6 @@ reth_codecs::impl_compression_for_compact!(StoredBlockBodyIndices);
 /// The storage representation of block withdrawals.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
 #[cfg_attr(any(test, feature = "arbitrary"), derive(arbitrary::Arbitrary))]
-#[cfg_attr(any(test, feature = "reth-codec"), derive(reth_codecs::Compact))]
 #[cfg_attr(any(test, feature = "reth-codec"), reth_codecs::add_arbitrary_tests(compact))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StoredBlockWithdrawals {
@@ -100,22 +99,42 @@ pub struct StaticFileBlockWithdrawals {
 }
 
 #[cfg(any(test, feature = "reth-codec"))]
+impl reth_codecs::Compact for StoredBlockWithdrawals {
+    fn to_compact<B>(&self, buf: &mut B) -> usize
+    where
+        B: bytes::BufMut + AsMut<[u8]>,
+    {
+        encode_withdrawals(&self.withdrawals, buf)
+    }
+
+    fn from_compact(buf: &[u8], len: usize) -> (Self, &[u8]) {
+        let (withdrawals, buf) = decode_withdrawals(buf, len);
+        (Self { withdrawals }, buf)
+    }
+}
+
+#[cfg(any(test, feature = "reth-codec"))]
 impl reth_codecs::Compact for StaticFileBlockWithdrawals {
     fn to_compact<B>(&self, buf: &mut B) -> usize
     where
         B: bytes::BufMut + AsMut<[u8]>,
     {
+        let mut len = 0;
         buf.put_u8(self.withdrawals.is_some() as u8);
+        len += 1;
         if let Some(withdrawals) = &self.withdrawals {
-            return 1 + withdrawals.to_compact(buf);
+            len += encode_withdrawals(withdrawals, buf);
         }
-        1
+        len
     }
-    fn from_compact(mut buf: &[u8], _: usize) -> (Self, &[u8]) {
+
+    fn from_compact(mut buf: &[u8], len: usize) -> (Self, &[u8]) {
         use bytes::Buf;
-        if buf.get_u8() == 1 {
-            let (w, buf) = Withdrawals::from_compact(buf, buf.len());
-            (Self { withdrawals: Some(w) }, buf)
+
+        let has_withdrawals = buf.get_u8() == 1;
+        if has_withdrawals {
+            let (withdrawals, buf) = decode_withdrawals(buf, len.saturating_sub(1));
+            (Self { withdrawals: Some(withdrawals) }, buf)
         } else {
             (Self { withdrawals: None }, buf)
         }
@@ -124,6 +143,47 @@ impl reth_codecs::Compact for StaticFileBlockWithdrawals {
 
 #[cfg(any(test, feature = "reth-codec"))]
 reth_codecs::impl_compression_for_compact!(StaticFileBlockWithdrawals);
+
+#[cfg(any(test, feature = "reth-codec"))]
+fn encode_withdrawals<B>(withdrawals: &Withdrawals, buf: &mut B) -> usize
+where
+    B: bytes::BufMut + AsMut<[u8]>,
+{
+    use reth_codecs::Compact;
+
+    let mut len = 0;
+    len += (withdrawals.len() as u64).to_compact(buf);
+    for withdrawal in withdrawals.iter() {
+        len += withdrawal.index.to_compact(buf);
+        len += withdrawal.validator_index.to_compact(buf);
+        buf.put_slice(withdrawal.address.as_slice());
+        len += withdrawal.address.as_slice().len();
+        len += withdrawal.amount.to_compact(buf);
+    }
+    len
+}
+
+#[cfg(any(test, feature = "reth-codec"))]
+fn decode_withdrawals(mut buf: &[u8], len: usize) -> (Withdrawals, &[u8]) {
+    use bytes::Buf;
+    use reth_codecs::Compact;
+
+    let (count, rest) = u64::from_compact(buf, len);
+    buf = rest;
+    let mut withdrawals = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let (index, next) = u64::from_compact(buf, buf.len());
+        buf = next;
+        let (validator_index, next) = u64::from_compact(buf, buf.len());
+        buf = next;
+        let address = Address::from_slice(&buf[..20]);
+        buf.advance(20);
+        let (amount, next) = u64::from_compact(buf, buf.len());
+        buf = next;
+        withdrawals.push(Withdrawal { index, validator_index, address, amount });
+    }
+    (Withdrawals::new(withdrawals), buf)
+}
 
 #[cfg(test)]
 mod tests {

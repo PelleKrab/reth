@@ -129,6 +129,10 @@ impl From<EngineApiError> for jsonrpsee_types::error::ErrorObject<'static> {
                     VersionSpecificValidationError::HasSlotNumberPreAmsterdam |
                     VersionSpecificValidationError::NoSlotNumberPostAmsterdam |
                     VersionSpecificValidationError::SlotNumberNotSupported,
+                ),
+            ) |
+            EngineApiError::EngineObjectValidationError(
+                EngineObjectValidationError::PayloadAttributes(
                     VersionSpecificValidationError::IlNotSupportedPreBogota,
                 ),
             ) |

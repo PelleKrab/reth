@@ -38,7 +38,7 @@ use reth_transaction_pool::{
     BestTransactions, BestTransactionsAttributes, PoolTransaction, TransactionPool,
     ValidPoolTransaction,
 };
-use revm::context_interface::{Block as _, Cfg as _};
+use revm::context_interface::{result::InvalidTransaction, Block as _, Cfg as _};
 use std::sync::Arc;
 use tracing::{debug, trace, warn};
 
@@ -523,7 +523,7 @@ where
         }
 
         // transaction gas limit too high
-        if cumulative_gas_used + tx.gas_limit() > block_gas_limit {
+        if cumulative_tx_gas_used + tx.gas_limit() > block_gas_limit {
             metrics::record_inclusion_list_transaction_excluded("gas_limit_exceeded");
             il_bitfield[i] = false;
             i += 1;
@@ -536,8 +536,8 @@ where
                 let miner_fee = tx
                     .effective_tip_per_gas(base_fee)
                     .expect("fee is always valid; execution succeeded");
-                total_fees += U256::from(miner_fee) * U256::from(gas_used);
-                cumulative_gas_used += gas_used;
+                total_fees += U256::from(miner_fee) * U256::from(gas_used.tx_gas_used());
+                cumulative_tx_gas_used += gas_used.tx_gas_used();
 
                 metrics::record_inclusion_list_transaction_included();
                 // Clear any stored exclusion reason since the transaction succeeded
@@ -546,11 +546,16 @@ where
             Err(BlockExecutionError::Validation(BlockValidationError::InvalidTx {
                 error, ..
             })) => {
+                let invalid_tx = error.as_invalid_tx_err();
                 let reason = if error.is_nonce_too_low() {
                     "nonce_too_low"
-                } else if error.is_nonce_too_high() {
+                } else if invalid_tx
+                    .is_some_and(|err| matches!(err, InvalidTransaction::NonceTooHigh { .. }))
+                {
                     "nonce_too_high"
-                } else if error.is_lack_of_funds_for_max_fee() {
+                } else if invalid_tx
+                    .is_some_and(|err| matches!(err, InvalidTransaction::LackOfFundForMaxFee { .. }))
+                {
                     "insufficient_balance"
                 } else {
                     "unknown"
@@ -558,8 +563,13 @@ where
 
                 // a transaction whose nonce is too high may become valid.
                 // a transaction whose sender lacks funds may become valid.
-                let is_retryable =
-                    error.is_nonce_too_high() || error.is_lack_of_funds_for_max_fee();
+                let is_retryable = invalid_tx.is_some_and(|err| {
+                    matches!(
+                        err,
+                        InvalidTransaction::NonceTooHigh { .. }
+                            | InvalidTransaction::LackOfFundForMaxFee { .. }
+                    )
+                });
 
                 if is_retryable {
                     // Store reason for later, don't record metric yet to avoid double-counting

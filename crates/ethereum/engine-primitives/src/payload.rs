@@ -392,9 +392,13 @@ impl EthPayloadBuilderAttributes {
     pub fn new(parent: B256, attributes: PayloadAttributes) -> Self {
         let id = payload_id(&parent, &attributes);
 
-        // if the IL is present, then attempt to decode each transaction in the IL.
-        let il = attributes.inclusion_list_transactions.map(|il| {
-            il.into_iter().map(|tx| Recovered::decode(&mut tx.0.as_ref()).ok()).collect()
+        let il = attributes.inclusion_list_transactions.as_ref().map(|il| {
+            il.iter()
+                .map(|tx| {
+                    let mut bytes = tx.as_ref();
+                    Recovered::decode(&mut bytes).ok()
+                })
+                .collect()
         });
 
         Self {
@@ -465,6 +469,7 @@ impl PayloadBuilderAttributes for EthPayloadBuilderAttributes {
             withdrawals: Some(self.withdrawals.0.clone()),
             parent_beacon_block_root: self.parent_beacon_block_root,
             inclusion_list_transactions: Some(il),
+            ..Default::default()
         };
         Self::new(self.parent, attributes)
     }

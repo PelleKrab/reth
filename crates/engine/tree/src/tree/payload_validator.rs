@@ -675,8 +675,10 @@ where
                     );
                     InsertBlockError::new(
                         block.clone().into_sealed_block(),
-                        BlockExecutionError::Validation(BlockValidationError::InvalidInclusionList)
-                            .into(),
+                        BlockExecutionError::Validation(BlockValidationError::msg(
+                            "block did not satisfy inclusion list",
+                        ))
+                        .into(),
                     )
                 })?;
             match self.validate_block_inclusion_list(il_state_provider, &block, il) {
@@ -2058,7 +2060,7 @@ where
                     .record_inclusion_list_transaction_excluded_unknown(unknown_count);
 
                 return Err(BlockExecutionError::Validation(
-                    BlockValidationError::InvalidInclusionList,
+                    BlockValidationError::msg("block did not satisfy inclusion list"),
                 ));
             }
             // Insufficient balance (reason: balance)

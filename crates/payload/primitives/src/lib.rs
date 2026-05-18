@@ -253,6 +253,18 @@ pub fn validate_block_access_list_presence<T: EthereumHardforks>(
                     .to_error(VersionSpecificValidationError::HasBlockAccessListPreAmsterdam))
             }
         }
+
+        // Catch-all for newer engine API versions (e.g., V7+) to maintain compatibility.
+        _ => {
+            if is_amsterdam_active && !has_block_access_list {
+                return Err(message_validation_kind
+                    .to_error(VersionSpecificValidationError::NoBlockAccessListPostAmsterdam))
+            }
+            if !is_amsterdam_active && has_block_access_list {
+                return Err(message_validation_kind
+                    .to_error(VersionSpecificValidationError::HasBlockAccessListPreAmsterdam))
+            }
+        }
     };
 
     Ok(())
@@ -311,6 +323,18 @@ pub fn validate_slot_number_presence<T: EthereumHardforks>(
         }
 
         EngineApiMessageVersion::V6 => {
+            if is_amsterdam_active && !has_slot_number {
+                return Err(message_validation_kind
+                    .to_error(VersionSpecificValidationError::NoSlotNumberPostAmsterdam))
+            }
+            if !is_amsterdam_active && has_slot_number {
+                return Err(message_validation_kind
+                    .to_error(VersionSpecificValidationError::HasSlotNumberPreAmsterdam))
+            }
+        }
+
+        // Catch-all for newer engine API versions (e.g., V7+) to maintain compatibility.
+        _ => {
             if is_amsterdam_active && !has_slot_number {
                 return Err(message_validation_kind
                     .to_error(VersionSpecificValidationError::NoSlotNumberPostAmsterdam))

@@ -904,7 +904,9 @@ impl From<Genesis> for ChainSpec {
             (EthereumHardfork::Bpo4.boxed(), genesis.config.bpo4_time),
             (EthereumHardfork::Bpo5.boxed(), genesis.config.bpo5_time),
             (EthereumHardfork::Amsterdam.boxed(), genesis.config.amsterdam_time),
-            (EthereumHardfork::Eip7805.boxed(), genesis.config.eip7805_time),
+            // EIP-7805 activation time may be stored in genesis.config.extra_fields (alloy-genesis v2+).
+            // Try to read it from extra_fields if present, otherwise fall back to None.
+            (EthereumHardfork::Eip7805.boxed(), genesis.config.extra_fields.get("eip7805_time").and_then(|v| v.as_u64())),
         ];
 
         let mut time_hardforks = time_hardfork_opts

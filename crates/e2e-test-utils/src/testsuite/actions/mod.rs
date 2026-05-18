@@ -237,8 +237,10 @@ pub fn validate_fcu_response(response: &ForkchoiceUpdated, context: &str) -> Res
             Err(eyre::eyre!("{}: FCU rejected as invalid: {:?}", context, validation_error))
         }
         PayloadStatusEnum::InclusionListUnsatisfied => {
-            // Treat inclusion list unsatisfied as an invalid response for FCU purposes.
-            Err(eyre::eyre!("{}: FCU rejected due to inclusion list unsatisfied", context))
+            Err(eyre::eyre!(
+                "{}: FCU rejected due to inclusion list unsatisfied",
+                context
+            ))
         }
         PayloadStatusEnum::Syncing => {
             debug!("{}: FCU accepted, node is syncing", context);
