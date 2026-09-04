@@ -3,7 +3,7 @@
 //! Covers the appendability check that decides whether a block satisfies the inclusion list it
 //! was given, and the bounded store of lists retained from `engine_newPayloadV6`.
 
-use alloy_consensus::Transaction;
+use alloy_consensus::{constants::KECCAK_EMPTY, Transaction};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::{
     map::{B256Map, B256Set},
@@ -13,9 +13,8 @@ use reth_errors::ProviderResult;
 use reth_primitives_traits::{BlockBody as _, NodePrimitives, RecoveredBlock, SignedTransaction};
 use reth_provider::StateProviderBox;
 use revm::{
-    context_interface::cfg::gas_params::Eip2780TxInfo,
-    interpreter::gas::calculate_initial_tx_gas,
-    primitives::{eip3860::MAX_INITCODE_SIZE, hardfork::SpecId},
+    context_interface::cfg::gas_params::Eip2780TxInfo, interpreter::gas::calculate_initial_tx_gas,
+    primitives::hardfork::SpecId,
 };
 use std::collections::VecDeque;
 
@@ -30,6 +29,8 @@ pub(super) struct InclusionListContext {
     pub(super) available_gas: u64,
     /// EIP-7825 cap on a single transaction's gas limit.
     pub(super) tx_gas_limit_cap: u64,
+    /// EIP-3860 init code bound, as raised by EIP-7954 from Amsterdam on.
+    pub(super) max_initcode_size: usize,
 }
 
 /// Returns whether the block satisfies its EIP-7805 inclusion list, i.e. no inclusion-list
@@ -100,8 +101,9 @@ fn could_append_transaction<N: NodePrimitives>(
         return Ok(false)
     }
 
-    // EIP-3860 init code bound.
-    if transaction.is_create() && transaction.input().len() > MAX_INITCODE_SIZE {
+    // EIP-3860 init code bound. The limit is fork-dependent (EIP-7954 raises it in Amsterdam),
+    // so it comes from the block's own EVM environment rather than a fixed constant.
+    if transaction.is_create() && transaction.input().len() > ctx.max_initcode_size {
         return Ok(false)
     }
 
@@ -147,7 +149,13 @@ fn could_append_transaction<N: NodePrimitives>(
     let account = state.basic_account(&sender)?.unwrap_or_default();
 
     // An account carrying code is not an EOA unless the code is an EIP-7702 delegation.
-    if account.has_bytecode() && !state.account_code(&sender)?.is_some_and(|code| code.is_eip7702())
+    //
+    // The code hash decides this, not whether `bytecode_hash` is set: a state provider is free to
+    // report a codeless account as `Some(KECCAK_EMPTY)` rather than `None`, and only accounts the
+    // block itself touched come back normalized to `None`. Keying off `Account::has_bytecode`
+    // therefore rejects most plain senders, which reports blocks as satisfying a list they do not.
+    if account.get_bytecode_hash() != KECCAK_EMPTY &&
+        !state.account_code(&sender)?.is_some_and(|code| code.is_eip7702())
     {
         return Ok(false)
     }
@@ -234,6 +242,7 @@ mod inclusion_list_tests {
             base_fee_per_gas: Some(BASE_FEE),
             available_gas: 1_000_000,
             tx_gas_limit_cap: 500_000,
+            max_initcode_size: revm::primitives::eip7954::MAX_INITCODE_SIZE,
         }
     }
 
@@ -432,6 +441,46 @@ mod inclusion_list_tests {
             input: Default::default(),
         });
         assert!(!could_append(tx, funded(0), context()));
+    }
+
+    #[test]
+    fn init_code_bound_follows_the_fork() {
+        // EIP-7954 raises the EIP-3860 limit in Amsterdam. Holding the pre-Amsterdam constant
+        // here would judge a legal creation unappendable.
+        let create = |input_len: usize| {
+            EthTransaction::Legacy(TxLegacy {
+                chain_id: Some(CHAIN_ID),
+                nonce: 0,
+                gas_price: BASE_FEE as u128,
+                gas_limit: 30_000_000,
+                to: TxKind::Create,
+                value: U256::ZERO,
+                input: vec![0u8; input_len].into(),
+            })
+        };
+        let ctx = InclusionListContext {
+            available_gas: 30_000_000,
+            tx_gas_limit_cap: 30_000_000,
+            ..context()
+        };
+
+        assert!(could_append(
+            create(revm::primitives::eip3860::MAX_INITCODE_SIZE + 1),
+            funded(0),
+            ctx
+        ));
+        assert!(!could_append(create(ctx.max_initcode_size + 1), funded(0), ctx));
+    }
+
+    #[test]
+    fn sender_with_an_empty_code_hash_is_appendable() {
+        // Plain senders reach the check with `bytecode_hash: Some(KECCAK_EMPTY)` whenever they
+        // come from state the block did not touch, which is the common case. Treating that as
+        // "has code" made every such transaction unappendable and reported blocks as satisfying
+        // inclusion lists they had ignored.
+        let account = ExtendedAccount::new(0, U256::from(10u64).pow(U256::from(20u64)))
+            .with_bytecode(Bytes::new());
+        assert!(could_append(legacy_tx(Some(CHAIN_ID), 0, 100_000), account, context()));
     }
 
     #[test]

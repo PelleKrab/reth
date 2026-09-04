@@ -3552,6 +3552,7 @@ where
             base_fee_per_gas: block.base_fee_per_gas(),
             available_gas: block.gas_limit().saturating_sub(block.gas_used()),
             tx_gas_limit_cap: evm_env.cfg_env.tx_gas_limit_cap(),
+            max_initcode_size: evm_env.cfg_env.max_initcode_size(),
         };
 
         let result = inclusion_list_satisfied::<N>(&block, &state, &ctx, &transactions)?;
