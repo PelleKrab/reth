@@ -107,7 +107,10 @@ use crate::tree::{
     CacheWaitDurations, CachedStateProvider, EngineApiMetrics, EngineApiTreeState, ExecutionEnv,
     PayloadHandle, StateProviderDatabase, TreeConfig, WaitForCaches,
 };
-use alloy_consensus::transaction::{Either, TxHashRef};
+use alloy_consensus::{
+    transaction::{Either, TxHashRef},
+    Transaction as _,
+};
 use alloy_eip7928::{
     bal::{Bal, DecodedBal},
     BlockAccessList,
@@ -131,6 +134,7 @@ use crate::tree::{
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::Address;
 use reth_chain_state::{CanonicalInMemoryState, ExecutedBlock, ExecutionTimingStats};
+use reth_chainspec::EthChainSpec;
 use reth_consensus::{ConsensusError, FullConsensus, ReceiptRootBloom};
 use reth_engine_primitives::{
     ConfigureEngineEvm, ExecutableTxIterator, ExecutionPayload, InvalidBlockHook, PayloadValidator,
@@ -153,11 +157,11 @@ use reth_primitives_traits::{
     RecoveredBlock, SealedBlock, SealedHeader, SignerRecoverable,
 };
 use reth_provider::{
-    BlockExecutionOutput, BlockHashReader, BlockReader, ChangeSetReader, DatabaseProviderFactory,
-    DatabaseProviderROFactory, EvmStateProvider, EvmStateProviderBox, HashedPostStateProvider,
-    HistoryReader, ProviderError, PruneCheckpointReader, StageCheckpointReader, StateProvider,
-    StateProviderFactory, StateReader, StateRootProvider, StorageChangeSetReader,
-    StorageSettingsCache,
+    BlockExecutionOutput, BlockHashReader, BlockReader, ChainSpecProvider, ChangeSetReader,
+    DatabaseProviderFactory, DatabaseProviderROFactory, EvmStateProvider, EvmStateProviderBox,
+    HashedPostStateProvider, HistoryReader, ProviderError, PruneCheckpointReader,
+    StageCheckpointReader, StateProvider, StateProviderFactory, StateReader, StateRootProvider,
+    StorageChangeSetReader, StorageSettingsCache,
 };
 use reth_revm::db::{states::bundle_state::BundleRetention, BundleAccount, State};
 use reth_storage_overlay::{OverlayManager, OverlayStateProviderFactory};
@@ -325,6 +329,8 @@ where
         + ChangeSetReader
         + StateProviderFactory
         + StateReader
+        // The EIP-7805 appendability check needs the block's blob schedule.
+        + ChainSpecProvider<ChainSpec: EthChainSpec>
         + Clone
         + 'static,
     OverlayStateProviderFactory<P, N>: DatabaseProviderROFactory<
@@ -1120,6 +1126,18 @@ where
         let inclusion_list_satisfied = if let Some(transactions) =
             input.inclusion_list_transactions()
         {
+            // The executor enforces the two gas dimensions of the spec's
+            // `check_block_gas_capacity` but not its blob dimension, which is bounded by the blob
+            // schedule in force at the block's timestamp. A block with no schedule cannot carry
+            // blobs, so the resulting zero budget leaves every blob transaction unappendable.
+            let blob_gas_available = self
+                .provider
+                .chain_spec()
+                .blob_params_at_timestamp(input.timestamp())
+                .map(|params| params.max_blob_gas_per_block())
+                .unwrap_or_default()
+                .saturating_sub(input.blob_gas_used().unwrap_or_default());
+
             let mut satisfied = true;
             for encoded in transactions {
                 let Ok(transaction) = N::SignedTx::decode_2718_exact(encoded) else { continue };
@@ -1128,6 +1146,9 @@ where
                         &transaction,
                     ))
                 }) {
+                    continue
+                }
+                if transaction.blob_gas_used().unwrap_or_default() > blob_gas_available {
                     continue
                 }
                 let Ok(transaction) = SignerRecoverable::try_into_recovered(transaction) else {
@@ -1905,6 +1926,7 @@ where
         + StateProviderFactory
         + StateReader
         + ChangeSetReader
+        + ChainSpecProvider<ChainSpec: EthChainSpec>
         + Clone
         + 'static,
     OverlayStateProviderFactory<P, N>: DatabaseProviderROFactory<
@@ -2211,6 +2233,28 @@ impl<T: PayloadTypes> BlockOrPayload<T> {
         match self {
             Self::Payload(payload) => payload.gas_limit(),
             Self::Block(block) => block.gas_limit(),
+        }
+    }
+
+    /// Returns the timestamp of the block.
+    pub fn timestamp(&self) -> u64
+    where
+        T::ExecutionData: ExecutionPayload,
+    {
+        match self {
+            Self::Payload(payload) => payload.timestamp(),
+            Self::Block(block) => block.timestamp(),
+        }
+    }
+
+    /// Returns the blob gas used by the block, `None` before Cancun.
+    pub fn blob_gas_used(&self) -> Option<u64>
+    where
+        T::ExecutionData: ExecutionPayload,
+    {
+        match self {
+            Self::Payload(payload) => payload.blob_gas_used(),
+            Self::Block(block) => block.blob_gas_used(),
         }
     }
 }
